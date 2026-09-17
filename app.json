@@ -2,14 +2,17 @@
   "expo": {
     "name": "RideRutgers",
     "slug": "RideRutgers",
+    "scheme": "riderutgers",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "edu.rutgers.riderutgers"
     },
     "android": {
+      "package": "edu.rutgers.riderutgers",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -20,6 +23,23 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "RideRutgers uses your location to match you with nearby rides and show live driver tracking."
+        }
+      ],
+      "expo-font",
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "process.env.GOOGLE_MAPS_API_KEY"
+        }
+      ]
+    ]
   }
 }
