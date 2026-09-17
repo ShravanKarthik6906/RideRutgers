@@ -2,37 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { supabase } from '../../lib/supabase';
 import { colors, fontSizes, spacing } from '../../constants/theme';
 
-// Supabase's confirmation email links here with the session tokens in the URL
-// fragment (implicit flow), e.g. riderutgers://auth/callback#access_token=...
-// &refresh_token=...&type=signup. Fragments aren't parsed into Linking's
-// queryParams, so we pull them out of the raw URL ourselves.
+// Supabase's confirmation email links here with the session tokens attached
+// (as a query string or a URL fragment, depending on platform) — expo-auth-session's
+// QueryParams helper normalizes both, matching Supabase's own Expo deep-linking guide:
+// https://supabase.com/docs/guides/auth/native-mobile-deep-linking
 export default function AuthCallback() {
-  const url = Linking.useURL();
+  const url = Linking.useLinkingURL();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!url) return;
 
-    const hash = url.split('#')[1];
-    const params = new URLSearchParams(hash ?? '');
-    const errorDescription = params.get('error_description');
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
+    const { params, errorCode } = QueryParams.getQueryParams(url);
 
-    if (errorDescription) {
-      setError(errorDescription);
+    if (errorCode || params.error_description) {
+      setError(params.error_description ?? errorCode ?? 'Verification failed.');
       return;
     }
-    if (!accessToken || !refreshToken) {
+    if (!params.access_token || !params.refresh_token) {
       setError('This link is missing its verification tokens.');
       return;
     }
 
     supabase.auth
-      .setSession({ access_token: accessToken, refresh_token: refreshToken })
+      .setSession({ access_token: params.access_token, refresh_token: params.refresh_token })
       .then(({ error: sessionError }) => {
         if (sessionError) {
           setError(sessionError.message);
