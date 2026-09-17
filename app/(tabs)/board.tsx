@@ -10,23 +10,29 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchUpcomingRides } from '../../lib/api';
+import { fetchOpenRideRequests, fetchUpcomingRides } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { RideCard } from '../../components/RideCard';
+import { RideRequestCard } from '../../components/RideRequestCard';
 import { EmptyState } from '../../components/EmptyState';
 import { colors, spacing, fontSizes, radius } from '../../constants/theme';
-import type { Ride } from '../../lib/types';
+import type { Ride, RideRequest } from '../../lib/types';
+
+type BoardView = 'rides' | 'requests';
 
 export default function Board() {
+  const [view, setView] = useState<BoardView>('rides');
   const [rides, setRides] = useState<Ride[]>([]);
+  const [requests, setRequests] = useState<RideRequest[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchUpcomingRides();
-      setRides(data);
+      const [rideData, requestData] = await Promise.all([fetchUpcomingRides(), fetchOpenRideRequests()]);
+      setRides(rideData);
+      setRequests(requestData);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -38,19 +44,28 @@ export default function Board() {
     const channel = supabase
       .channel('rides-board')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ride_requests' }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [load]);
 
-  const filtered = useMemo(() => {
+  const filteredRides = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rides;
     return rides.filter(
       (r) => r.origin_label.toLowerCase().includes(q) || r.destination_label.toLowerCase().includes(q)
     );
   }, [rides, query]);
+
+  const filteredRequests = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return requests;
+    return requests.filter(
+      (r) => r.origin_label.toLowerCase().includes(q) || r.destination_label.toLowerCase().includes(q)
+    );
+  }, [requests, query]);
 
   return (
     <View style={styles.container}>
@@ -59,6 +74,21 @@ export default function Board() {
         <Pressable style={styles.postButton} onPress={() => router.push('/post-ride')}>
           <Ionicons name="add" size={20} color={colors.white} />
           <Text style={styles.postButtonText}>Post</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.segmented}>
+        <Pressable
+          style={[styles.segmentButton, view === 'rides' && styles.segmentButtonActive]}
+          onPress={() => setView('rides')}
+        >
+          <Text style={[styles.segmentText, view === 'rides' && styles.segmentTextActive]}>Rides</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.segmentButton, view === 'requests' && styles.segmentButtonActive]}
+          onPress={() => setView('requests')}
+        >
+          <Text style={[styles.segmentText, view === 'requests' && styles.segmentTextActive]}>Requests</Text>
         </Pressable>
       </View>
 
@@ -73,30 +103,57 @@ export default function Board() {
         />
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => <RideCard ride={item} onPress={() => router.push(`/ride/${item.id}`)} />}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              load();
-            }}
-            tintColor={colors.scarlet}
-          />
-        }
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              title="No rides posted yet"
-              subtitle="Be the first to post a ride, or check back soon."
+      {view === 'rides' ? (
+        <FlatList
+          data={filteredRides}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => <RideCard ride={item} onPress={() => router.push(`/ride/${item.id}`)} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+              tintColor={colors.scarlet}
             />
-          ) : null
-        }
-      />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                title="No rides posted yet"
+                subtitle="Be the first to post a ride, or check back soon."
+              />
+            ) : null
+          }
+        />
+      ) : (
+        <FlatList
+          data={filteredRequests}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => <RideRequestCard request={item} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+              tintColor={colors.scarlet}
+            />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                title="No open requests"
+                subtitle="When a student requests a ride, it'll show up here."
+              />
+            ) : null
+          }
+        />
+      )}
     </View>
   );
 }
@@ -118,6 +175,31 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xl,
     fontWeight: '800',
     color: colors.black,
+  },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.gray100,
+    borderRadius: radius.md,
+    padding: 4,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+  },
+  segmentButtonActive: {
+    backgroundColor: colors.white,
+  },
+  segmentText: {
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    color: colors.gray600,
+  },
+  segmentTextActive: {
+    color: colors.scarlet,
   },
   postButton: {
     flexDirection: 'row',
