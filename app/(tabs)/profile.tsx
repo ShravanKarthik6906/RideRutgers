@@ -1,6 +1,7 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
 import { StatusBadge } from '../../components/StatusBadge';
 import { PrimaryButton } from '../../components/PrimaryButton';
@@ -49,6 +50,14 @@ export default function Profile() {
         <Text style={styles.cardLabel}>Phone</Text>
         <Text style={styles.cardValue}>{profile.phone || 'Not set'}</Text>
       </View>
+
+      <Pressable style={styles.card} onPress={() => router.push('/(tabs)/my-rides')}>
+        <View style={styles.cardRow}>
+          <Text style={styles.cardLabel}>Ride history</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.gray400} />
+        </View>
+        <Text style={styles.cardValue}>See your upcoming and past rides</Text>
+      </Pressable>
 
       <PrimaryButton title="Sign out" onPress={signOut} variant="danger" style={styles.signOut} />
     </ScrollView>

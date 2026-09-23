@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -12,7 +14,6 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/auth';
@@ -30,8 +31,10 @@ import {
   updateRideLiveLocation,
   updateRideStatus,
 } from '../../lib/api';
+import { shareCurrentLocation } from '../../lib/location';
 import { StatusBadge } from '../../components/StatusBadge';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { RouteMap } from '../../components/RouteMap';
 import { colors, spacing, fontSizes, radius } from '../../constants/theme';
 import { formatCurrency, formatMiles } from '../../lib/pricing';
 import type { Booking, Ride, RideMessage } from '../../lib/types';
@@ -170,6 +173,22 @@ export default function RideDetail() {
     await sendMessage(ride.id, session.user.id, body);
   };
 
+  const handleShareLocation = async () => {
+    try {
+      await shareCurrentLocation('Here is my current location');
+    } catch (e) {
+      Alert.alert('Could not share location', e instanceof Error ? e.message : 'Something went wrong.');
+    }
+  };
+
+  const handleSOS = () => {
+    Alert.alert('Emergency', 'What do you need to do?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Share my location', onPress: handleShareLocation },
+      { text: 'Call 911', style: 'destructive', onPress: () => Linking.openURL('tel:911') },
+    ]);
+  };
+
   const canMessage =
     isDriver || (myBooking && ['pending', 'confirmed', 'completed'].includes(myBooking.status));
 
@@ -208,47 +227,40 @@ export default function RideDetail() {
           })}{' '}
           · {formatMiles(ride.distance_miles)} · {ride.seats_available}/{ride.seats_total} seats open
         </Text>
-        <Text style={styles.driver}>
-          Driver: {ride.driver?.full_name ?? 'Verified driver'} (★ {ride.driver?.rating_avg?.toFixed(1) ?? '5.0'})
-        </Text>
+        <View style={styles.driverRow}>
+          <Text style={styles.driver}>
+            Driver: {ride.driver?.full_name ?? 'Verified driver'} (★ {ride.driver?.rating_avg?.toFixed(1) ?? '5.0'})
+          </Text>
+          {ride.driver?.is_driver_verified && (
+            <Ionicons name="checkmark-circle" size={16} color={colors.success} style={styles.verifiedIcon} />
+          )}
+        </View>
+
+        {ride.status === 'in_progress' && (
+          <View style={styles.emergencyRow}>
+            <Pressable style={styles.shareLocationButton} onPress={handleShareLocation}>
+              <Ionicons name="location" size={16} color={colors.scarlet} />
+              <Text style={styles.shareLocationText}>Share my location</Text>
+            </Pressable>
+            <Pressable style={styles.sosButton} onPress={handleSOS}>
+              <Ionicons name="warning" size={16} color={colors.white} />
+              <Text style={styles.sosText}>SOS</Text>
+            </Pressable>
+          </View>
+        )}
         <Text style={styles.settleNote}>
           Price is an estimate to settle up directly with the driver (Venmo, Zelle, cash, etc.) — RideRutgers
           doesn't process payments.
         </Text>
 
-        <View style={styles.mapWrapper}>
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: (ride.origin_lat + ride.destination_lat) / 2,
-              longitude: (ride.origin_lng + ride.destination_lng) / 2,
-              latitudeDelta: Math.max(0.05, Math.abs(ride.origin_lat - ride.destination_lat) * 1.8),
-              longitudeDelta: Math.max(0.05, Math.abs(ride.origin_lng - ride.destination_lng) * 1.8),
-            }}
-          >
-            <Marker coordinate={{ latitude: ride.origin_lat, longitude: ride.origin_lng }} pinColor={colors.scarlet} />
-            <Marker
-              coordinate={{ latitude: ride.destination_lat, longitude: ride.destination_lng }}
-              pinColor={colors.black}
-            />
-            <Polyline
-              coordinates={[
-                { latitude: ride.origin_lat, longitude: ride.origin_lng },
-                { latitude: ride.destination_lat, longitude: ride.destination_lng },
-              ]}
-              strokeColor={colors.gray400}
-              strokeWidth={2}
-              lineDashPattern={[6, 6]}
-            />
-            {showLiveMap && (
-              <Marker coordinate={{ latitude: ride.live_lat!, longitude: ride.live_lng! }}>
-                <View style={styles.liveDot}>
-                  <Ionicons name="car" size={16} color={colors.white} />
-                </View>
-              </Marker>
-            )}
-          </MapView>
-        </View>
+        <RouteMap
+          originLat={ride.origin_lat}
+          originLng={ride.origin_lng}
+          destinationLat={ride.destination_lat}
+          destinationLng={ride.destination_lng}
+          liveLat={showLiveMap ? ride.live_lat : null}
+          liveLng={showLiveMap ? ride.live_lng : null}
+        />
 
         {isDriver ? (
           <DriverControls
@@ -553,35 +565,57 @@ const styles = StyleSheet.create({
     color: colors.gray600,
     marginBottom: spacing.xs,
   },
+  driverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   driver: {
     fontSize: fontSizes.sm,
     color: colors.gray800,
+  },
+  verifiedIcon: {
+    marginLeft: spacing.xs,
+  },
+  emergencyRow: {
+    flexDirection: 'row',
     marginBottom: spacing.md,
+  },
+  shareLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.scarlet,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
+  },
+  shareLocationText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    color: colors.scarlet,
+    marginLeft: 4,
+  },
+  sosButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.danger,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  sosText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    color: colors.white,
+    marginLeft: 4,
   },
   settleNote: {
     fontSize: fontSizes.xs,
     color: colors.gray600,
     fontStyle: 'italic',
     marginBottom: spacing.md,
-  },
-  mapWrapper: {
-    height: 200,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-  },
-  map: {
-    flex: 1,
-  },
-  liveDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.scarlet,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
   },
   section: {
     marginBottom: spacing.lg,

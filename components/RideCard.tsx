@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
 import { formatCurrency, formatMiles } from '../lib/pricing';
 import { StatusBadge } from './StatusBadge';
@@ -41,9 +42,14 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress: () => void })
       </View>
 
       <View style={styles.footerRow}>
-        <Text style={styles.driverName}>
-          {ride.driver?.full_name ?? 'Verified driver'} · ★ {ride.driver?.rating_avg?.toFixed(1) ?? '5.0'}
-        </Text>
+        <View style={styles.driverNameRow}>
+          <Text style={styles.driverName} numberOfLines={1}>
+            {ride.driver?.full_name ?? 'Verified driver'} · ★ {ride.driver?.rating_avg?.toFixed(1) ?? '5.0'}
+          </Text>
+          {ride.driver?.is_driver_verified && (
+            <Ionicons name="checkmark-circle" size={13} color={colors.success} style={styles.verifiedIcon} />
+          )}
+        </View>
         <View style={styles.footerRight}>
           <Text style={styles.seats}>{ride.seats_available} seat{ride.seats_available === 1 ? '' : 's'} left</Text>
           <Text style={styles.price}>
@@ -128,10 +134,18 @@ const styles = StyleSheet.create({
     borderTopColor: colors.gray100,
     paddingTop: spacing.sm,
   },
+  driverNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
   driverName: {
     fontSize: fontSizes.xs,
     color: colors.gray600,
     flexShrink: 1,
+  },
+  verifiedIcon: {
+    marginLeft: 4,
   },
   footerRight: {
     alignItems: 'flex-end',

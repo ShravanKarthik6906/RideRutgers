@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { distanceInMiles, flatRatePrice } from './pricing';
-import type { Booking, Profile, Ride, RideMessage, RideRequest } from './types';
+import type { Booking, DriverPresence, Profile, Ride, RideMessage, RideRequest } from './types';
 
 const RIDE_SELECT = '*, driver:profiles!rides_driver_id_fkey(*)';
 const BOOKING_SELECT = '*, ride:rides(*, driver:profiles!rides_driver_id_fkey(*)), rider:profiles!bookings_rider_id_fkey(*)';
@@ -206,12 +206,25 @@ export async function sendMessage(rideId: string, senderId: string, body: string
 
 // ---- Driver verification ----
 
+export async function uploadDriverDocument(userId: string, uri: string, filename: string): Promise<string> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const path = `${userId}/${filename}`;
+  const { error } = await supabase.storage
+    .from('driver-documents')
+    .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+  if (error) throw error;
+  return path;
+}
+
 export async function applyForDriverVerification(input: {
   userId: string;
   licenseNumber: string;
   vehicleMake: string;
   vehicleModel: string;
   vehiclePlate: string;
+  licensePhotoPath?: string;
+  insurancePhotoPath?: string;
 }): Promise<void> {
   const { error } = await supabase.from('driver_applications').insert({
     user_id: input.userId,
@@ -219,9 +232,33 @@ export async function applyForDriverVerification(input: {
     vehicle_make: input.vehicleMake,
     vehicle_model: input.vehicleModel,
     vehicle_plate: input.vehiclePlate,
+    license_photo_path: input.licensePhotoPath,
+    insurance_photo_path: input.insurancePhotoPath,
   });
   if (error) throw error;
   await supabase.from('profiles').update({ driver_verification_status: 'pending' }).eq('id', input.userId);
+}
+
+// ---- Driver presence (foreground-only "online" broadcast for the live map) ----
+
+export async function fetchOnlineDrivers(): Promise<DriverPresence[]> {
+  const { data, error } = await supabase
+    .from('driver_presence')
+    .select('*, driver:profiles!driver_presence_driver_id_fkey(*)');
+  if (error) throw error;
+  return (data ?? []) as unknown as DriverPresence[];
+}
+
+export async function updateMyPresence(driverId: string, lat: number, lng: number): Promise<void> {
+  const { error } = await supabase
+    .from('driver_presence')
+    .upsert({ driver_id: driverId, lat, lng, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+export async function goOffline(driverId: string): Promise<void> {
+  const { error } = await supabase.from('driver_presence').delete().eq('driver_id', driverId);
+  if (error) throw error;
 }
 
 // ---- Profile ----

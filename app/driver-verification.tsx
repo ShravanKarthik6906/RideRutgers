@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
-import { applyForDriverVerification } from '../lib/api';
+import { applyForDriverVerification, uploadDriverDocument } from '../lib/api';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { colors, spacing, fontSizes, radius } from '../constants/theme';
 
@@ -12,8 +14,25 @@ export default function DriverVerification() {
   const [vehicleMake, setVehicleMake] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
+  const [licensePhotoUri, setLicensePhotoUri] = useState<string | null>(null);
+  const [insurancePhotoUri, setInsurancePhotoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const pickPhoto = async (onPicked: (uri: string) => void) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Enable photo library access to upload your documents.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      onPicked(result.assets[0].uri);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!session) return;
@@ -21,15 +40,25 @@ export default function DriverVerification() {
       setError('Please fill in every field.');
       return;
     }
+    if (!licensePhotoUri || !insurancePhotoUri) {
+      setError('Please upload a photo of your license and insurance card.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
+      const [licensePhotoPath, insurancePhotoPath] = await Promise.all([
+        uploadDriverDocument(session.user.id, licensePhotoUri, 'license.jpg'),
+        uploadDriverDocument(session.user.id, insurancePhotoUri, 'insurance.jpg'),
+      ]);
       await applyForDriverVerification({
         userId: session.user.id,
         licenseNumber: licenseNumber.trim(),
         vehicleMake: vehicleMake.trim(),
         vehicleModel: vehicleModel.trim(),
         vehiclePlate: vehiclePlate.trim().toUpperCase(),
+        licensePhotoPath,
+        insurancePhotoPath,
       });
       await refreshProfile();
       router.back();
@@ -58,10 +87,39 @@ export default function DriverVerification() {
         autoCapitalize="characters"
       />
 
+      <PhotoField
+        label="Driver's license photo"
+        uri={licensePhotoUri}
+        onPress={() => pickPhoto(setLicensePhotoUri)}
+      />
+      <PhotoField
+        label="Insurance card photo"
+        uri={insurancePhotoUri}
+        onPress={() => pickPhoto(setInsurancePhotoUri)}
+      />
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <PrimaryButton title="Submit application" onPress={handleSubmit} loading={loading} style={styles.button} />
     </ScrollView>
+  );
+}
+
+function PhotoField({ label, uri, onPress }: { label: string; uri: string | null; onPress: () => void }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable style={styles.photoPicker} onPress={onPress}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.photoPreview} />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Ionicons name="camera" size={22} color={colors.gray600} />
+            <Text style={styles.photoPlaceholderText}>Tap to upload a photo</Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -123,6 +181,28 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fontSizes.xs,
     marginBottom: spacing.sm,
+  },
+  photoPicker: {
+    height: 140,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  photoPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray50,
+  },
+  photoPlaceholderText: {
+    fontSize: fontSizes.xs,
+    color: colors.gray600,
+    marginTop: spacing.xs,
   },
   button: {
     marginTop: spacing.sm,

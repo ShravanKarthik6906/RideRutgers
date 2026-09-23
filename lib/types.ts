@@ -81,3 +81,11 @@ export interface Rating {
   comment: string | null;
   created_at: string;
 }
+
+export interface DriverPresence {
+  driver_id: string;
+  lat: number;
+  lng: number;
+  updated_at: string;
+  driver?: Profile;
+}
