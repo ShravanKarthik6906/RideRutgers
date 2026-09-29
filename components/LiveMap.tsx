@@ -1,21 +1,23 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
-import type { DriverPresence, Ride, RideRequest } from '../lib/types';
+import type { Ride } from '../lib/types';
 
 const RUTGERS_NEW_BRUNSWICK = { latitude: 40.5008, longitude: -74.4474 };
 
 interface Props {
   rides: Ride[];
-  requests: RideRequest[];
-  onlineDrivers: DriverPresence[];
   onSelectRide: (ride: Ride) => void;
-  onSelectRequest: (request: RideRequest) => void;
 }
 
-export function LiveMap({ rides, requests, onlineDrivers, onSelectRide, onSelectRequest }: Props) {
+// Visualizes posted, scheduled trips only — never live/ad-hoc driver
+// availability, and never rider requests (those are private — see
+// lib/api.ts's findMatchingRides). NJ's informal-carpool exemption requires
+// drivers to post trips they were already planning to take, not broadcast
+// "available now," and requests must never work as an open invitation for a
+// driver to invent a trip.
+export function LiveMap({ rides, onSelectRide }: Props) {
   return (
     <MapView
       style={styles.map}
@@ -32,28 +34,6 @@ export function LiveMap({ rides, requests, onlineDrivers, onSelectRide, onSelect
           onCalloutPress={() => onSelectRide(ride)}
         />
       ))}
-      {requests.map((request) => (
-        <Marker
-          key={`request-${request.id}`}
-          coordinate={{ latitude: request.origin_lat, longitude: request.origin_lng }}
-          pinColor={colors.gray600}
-          title={`${request.origin_label} → ${request.destination_label}`}
-          description={`${request.rider?.full_name ?? 'A student'} is looking for a ride`}
-          onCalloutPress={() => onSelectRequest(request)}
-        />
-      ))}
-      {onlineDrivers.map((presence) => (
-        <Marker
-          key={`driver-${presence.driver_id}`}
-          coordinate={{ latitude: presence.lat, longitude: presence.lng }}
-          title={presence.driver?.full_name ?? 'Online driver'}
-          description="Online now"
-        >
-          <View style={styles.driverDot}>
-            <Ionicons name="car" size={14} color={colors.white} />
-          </View>
-        </Marker>
-      ))}
     </MapView>
   );
 }
@@ -61,15 +41,5 @@ export function LiveMap({ rides, requests, onlineDrivers, onSelectRide, onSelect
 const styles = StyleSheet.create({
   map: {
     flex: 1,
-  },
-  driverDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
   },
 });

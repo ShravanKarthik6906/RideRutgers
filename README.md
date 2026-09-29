@@ -5,18 +5,18 @@ Verified peer-to-peer ridesharing for Rutgers students. Expo (React Native + Typ
 ## Features
 
 - **.edu-verified sign-in** — email OTP restricted to `rutgers.edu` / `scarletmail.rutgers.edu`.
-- **Ride Board** — drivers post ride offers with a flat-rate price estimate (`$1.50/mile` + `$1.20/minute`, $3 minimum); riders can also post open ride requests.
+- **Ride Board** — drivers post specific, already-planned trips (not live/ad-hoc availability) with an estimated gas cost split; riders can also post open ride requests, and browse posted trips as a list or on a map.
 - **Booking flow** — riders request to join a ride; drivers accept/decline; seats update automatically.
 - **Live tracking** — while a ride is in progress, the driver can share live location, visible to the rider on a map in real time (Supabase Realtime).
 - **In-ride chat** — simple messaging between a driver and their riders.
 - **Driver verification** — students apply with license + vehicle info; only verified drivers can post ride offers. Reviewed manually (see below) — no in-app admin panel yet.
 - **Ratings** — riders and drivers rate each other after a completed ride.
-- **No in-app payments** — RideRutgers only shows a price estimate. Riders and drivers settle up directly (Venmo, Zelle, cash, etc.); there's no payment processing or Rutgers commission built in.
+- **No in-app payments** — RideRutgers only shows a gas cost estimate. Riders and drivers settle up directly (Venmo, Zelle, cash, etc.); there's no payment processing or Rutgers commission built in.
 
 ## 1. Set up Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the SQL editor, run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) — it creates all tables, row-level security policies, and triggers.
+2. In the SQL editor, run the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_presence_and_documents.sql`, `0003_carpool_exemption_compliance.sql`) — they create all tables, row-level security policies, triggers, and the driver-documents storage bucket.
 3. In **Authentication → Providers → Email**, make sure "Enable email OTP" is on (it is by default) — the app uses `signInWithOtp` + a 6-digit code, not magic links.
 4. Copy your project's **URL** and **anon public key** from **Settings → API**.
 
@@ -46,7 +46,12 @@ The first verified driver has to be approved manually: after someone submits a d
 
 ## Pricing model
 
-Estimate = `distance_miles × $1.50` + `estimated_minutes × $1.20`, with a $3 minimum. Trip duration is estimated from distance at an assumed 25 mph average (no directions/routing API is wired up), purely to compute the time-based portion of the estimate — it's not used for navigation. This is shown to users as an estimate to settle up directly, not a charge.
+RideRutgers is designed to stay within New Jersey's informal-carpool exemption rather than operating like a Transportation Network Company (which would require a $1.5M commercial insurance policy and an MVC permit). That means two hard constraints, both enforced in the app itself, not just the pricing math:
+
+- **Distance-only gas cost, never time-based.** Estimate = `(distance_miles / assumed_mpg) × price_per_gallon`, split evenly across everyone in the car (driver included) — e.g. a driver + 2 riders splits three ways. No per-minute component, no surge/dynamic pricing, no per-rider negotiated price. The `assumed_mpg` and `price_per_gallon` constants live in [`constants/pricing.ts`](constants/pricing.ts) — update them there if NJ gas prices move meaningfully. The split assumes the car fills up (driver + all posted seats); it's a fixed estimate shown at posting time, not recalculated live as individual seats fill.
+- **Pre-planned trips only, never live/ad-hoc matching.** Drivers post a specific trip they were already planning to take (origin, destination, date/time) — there's no "I'm online and driving around right now" presence broadcast. Riders browse and request to join a specific posted trip. That's the legal line between a carpool and a TNC, separate from the pricing question.
+
+This is shown to users as a gas cost estimate to settle up directly, not a charge.
 
 ## Google Maps API key (Android, production builds only)
 
@@ -61,4 +66,4 @@ Estimate = `distance_miles × $1.50` + `estimated_minutes × $1.20`, with a $3 m
 - **Location picking** uses tap-to-drop-a-pin on a map (with reverse geocoding for a label) instead of a full places-autocomplete search, so no Google Places API key is required.
 - **Maps**: iOS uses Apple Maps by default (no key needed, no config). Android uses Google Maps; see above for the production-build key.
 - **Driver review** is manual via the Supabase dashboard rather than an in-app admin panel — fine for a small pilot group.
-- **No payments** — the app computes and displays a price estimate only. There is no Stripe/payment SDK anywhere in this project by design.
+- **No payments** — the app computes and displays a gas cost estimate only. There is no Stripe/payment SDK anywhere in this project by design.

@@ -211,7 +211,7 @@ export default function RideDetail() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
           <StatusBadge status={ride.status} />
-          <Text style={styles.price}>{formatCurrency(ride.price_per_seat)} / seat</Text>
+          <Text style={styles.price}>{formatCurrency(ride.cost_per_person)} / person</Text>
         </View>
 
         <Text style={styles.route}>
@@ -249,8 +249,8 @@ export default function RideDetail() {
           </View>
         )}
         <Text style={styles.settleNote}>
-          Price is an estimate to settle up directly with the driver (Venmo, Zelle, cash, etc.) — RideRutgers
-          doesn't process payments.
+          This is an estimated gas cost split to settle up directly with the driver (Venmo, Zelle, cash, etc.) —
+          RideRutgers doesn't process payments.
         </Text>
 
         <RouteMap

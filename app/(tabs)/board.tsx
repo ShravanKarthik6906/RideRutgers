@@ -1,136 +1,118 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import { useAuth } from '../../lib/auth';
-import { fetchOnlineDrivers, fetchOpenRideRequests, fetchUpcomingRides, goOffline, updateMyPresence } from '../../lib/api';
+import { fetchUpcomingRides } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
+import { RideCard } from '../../components/RideCard';
+import { EmptyState } from '../../components/EmptyState';
 import { LiveMap } from '../../components/LiveMap';
 import { colors, spacing, fontSizes, radius } from '../../constants/theme';
-import type { DriverPresence, Ride, RideRequest } from '../../lib/types';
+import type { Ride } from '../../lib/types';
 
+type Layout = 'list' | 'map';
+
+// Drivers only ever post trips they were already planning to take, and
+// riders browse/join them here — there is no "here are unfulfilled
+// requests, pick one" view. See lib/api.ts's findMatchingRides and
+// supabase/migrations/0004_private_ride_requests.sql for how a rider's own
+// request stays private and only ever matches against what's posted here.
 export default function Board() {
-  const { session, profile } = useAuth();
+  const [layout, setLayout] = useState<Layout>('list');
   const [rides, setRides] = useState<Ride[]>([]);
-  const [requests, setRequests] = useState<RideRequest[]>([]);
-  const [onlineDrivers, setOnlineDrivers] = useState<DriverPresence[]>([]);
-  const [online, setOnline] = useState(false);
-  const [togglingOnline, setTogglingOnline] = useState(false);
-  const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [rideData, requestData, driverData] = await Promise.all([
-      fetchUpcomingRides(),
-      fetchOpenRideRequests(),
-      fetchOnlineDrivers(),
-    ]);
-    setRides(rideData);
-    setRequests(requestData);
-    setOnlineDrivers(driverData);
+    try {
+      const rideData = await fetchUpcomingRides();
+      setRides(rideData);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
     load();
     const channel = supabase
-      .channel('live-map')
+      .channel('rides-board')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ride_requests' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_presence' }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [load]);
 
-  const stopBroadcasting = useCallback(() => {
-    watchRef.current?.remove();
-    watchRef.current = null;
-    if (session) goOffline(session.user.id).catch(() => {});
-    setOnline(false);
-  }, [session]);
-
-  const startBroadcasting = useCallback(async () => {
-    if (!session) return;
-    setTogglingOnline(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Enable location access to go online for nearby riders to see you.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      await updateMyPresence(session.user.id, position.coords.latitude, position.coords.longitude);
-      watchRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 25 },
-        (loc) => updateMyPresence(session.user.id, loc.coords.latitude, loc.coords.longitude)
-      );
-      setOnline(true);
-    } finally {
-      setTogglingOnline(false);
-    }
-  }, [session]);
-
-  // "Online" only counts while the app is in the foreground.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' && watchRef.current) {
-        stopBroadcasting();
-      }
-    });
-    return () => sub.remove();
-  }, [stopBroadcasting]);
-
-  useEffect(() => {
-    return () => {
-      watchRef.current?.remove();
-      if (watchRef.current && session) goOffline(session.user.id).catch(() => {});
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const canGoOnline = !!profile?.is_driver_verified;
+  const filteredRides = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rides;
+    return rides.filter(
+      (r) => r.origin_label.toLowerCase().includes(q) || r.destination_label.toLowerCase().includes(q)
+    );
+  }, [rides, query]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Live Map</Text>
-        <Pressable style={styles.postButton} onPress={() => router.push('/post-ride')}>
-          <Ionicons name="add" size={20} color={colors.white} />
-          <Text style={styles.postButtonText}>Post</Text>
-        </Pressable>
+        <Text style={styles.title}>Ride Board</Text>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.layoutToggle} onPress={() => setLayout(layout === 'list' ? 'map' : 'list')}>
+            <Ionicons name={layout === 'list' ? 'map-outline' : 'list-outline'} size={20} color={colors.scarlet} />
+          </Pressable>
+          <Pressable style={styles.postButton} onPress={() => router.push('/post-ride')}>
+            <Ionicons name="add" size={20} color={colors.white} />
+            <Text style={styles.postButtonText}>Post</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <View style={styles.mapWrapper}>
-        <LiveMap
-          rides={rides}
-          requests={requests}
-          onlineDrivers={onlineDrivers}
-          onSelectRide={(ride) => router.push(`/ride/${ride.id}`)}
-          onSelectRequest={(request) =>
-            Alert.alert(
-              `${request.origin_label} → ${request.destination_label}`,
-              `${request.rider?.full_name ?? 'A student'} is looking for a ride around ${new Date(
-                request.requested_time
-              ).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`
-            )
+      {layout === 'list' && (
+        <View style={styles.searchWrapper}>
+          <Ionicons name="search" size={18} color={colors.gray400} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by origin or destination"
+            placeholderTextColor={colors.gray400}
+            value={query}
+            onChangeText={setQuery}
+          />
+        </View>
+      )}
+
+      {layout === 'map' ? (
+        <View style={styles.mapWrapper}>
+          <LiveMap rides={filteredRides} onSelectRide={(ride) => router.push(`/ride/${ride.id}`)} />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredRides}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => <RideCard ride={item} onPress={() => router.push(`/ride/${item.id}`)} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+              tintColor={colors.scarlet}
+            />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                title="No rides posted yet"
+                subtitle="Be the first to post a ride, or check back soon."
+              />
+            ) : null
           }
         />
-
-        {canGoOnline && (
-          <Pressable
-            style={[styles.onlinePill, online && styles.onlinePillActive]}
-            onPress={online ? stopBroadcasting : startBroadcasting}
-            disabled={togglingOnline}
-          >
-            <View style={[styles.onlineDot, online && styles.onlineDotActive]} />
-            <Text style={[styles.onlineText, online && styles.onlineTextActive]}>
-              {online ? 'Online — tap to go offline' : 'Go online'}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    </View>
+      )}
+    </SafeAreaView>
   );
 }
 
@@ -152,6 +134,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.black,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  layoutToggle: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
   postButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -165,44 +160,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 2,
   },
-  mapWrapper: {
-    flex: 1,
-  },
-  onlinePill: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    alignSelf: 'center',
+  searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    shadowColor: colors.black,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    paddingHorizontal: spacing.sm,
   },
-  onlinePillActive: {
-    backgroundColor: colors.success,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.gray400,
+  searchIcon: {
     marginRight: spacing.xs,
   },
-  onlineDotActive: {
-    backgroundColor: colors.white,
-  },
-  onlineText: {
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.sm,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
-    color: colors.gray800,
+    color: colors.black,
   },
-  onlineTextActive: {
-    color: colors.white,
+  list: {
+    paddingBottom: spacing.xl,
+  },
+  mapWrapper: {
+    flex: 1,
   },
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { updateProfile } from '../../lib/api';
 import { PrimaryButton } from '../../components/PrimaryButton';
@@ -31,7 +32,7 @@ export default function Onboarding() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Text style={styles.title}>Welcome to RideRutgers</Text>
       <Text style={styles.subtitle}>Let's set up your profile.</Text>
 
@@ -57,7 +58,7 @@ export default function Onboarding() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <PrimaryButton title="Get started" onPress={handleSave} loading={loading} style={styles.button} />
-    </View>
+    </SafeAreaView>
   );
 }
 

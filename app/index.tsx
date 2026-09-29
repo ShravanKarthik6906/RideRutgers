@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import { colors } from '../constants/theme';
@@ -9,9 +10,9 @@ export default function Index() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <ActivityIndicator color={colors.scarlet} size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 

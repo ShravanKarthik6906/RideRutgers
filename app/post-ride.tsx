@@ -1,13 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { createRide, createRideRequest } from '../lib/api';
-import { distanceInMiles, formatCurrency, formatMiles, formatMinutes, priceBreakdown } from '../lib/pricing';
+import { createRide, createRideRequest, findMatchingRides } from '../lib/api';
+import { distanceInMiles, estimateGasCostSplit, formatCurrency, formatMiles } from '../lib/pricing';
+import { ASSUMED_MPG, PRICE_PER_GALLON } from '../constants/pricing';
 import { MapPicker, type PickedLocation } from '../components/MapPicker';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { RideCard } from '../components/RideCard';
 import { colors, spacing, fontSizes, radius } from '../constants/theme';
+import type { Ride } from '../lib/types';
 
 type Mode = 'offer' | 'request';
 
@@ -23,13 +26,71 @@ export default function PostRide() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Request mode is search-first: a request only ever matches against trips
+  // drivers already posted, never a public invitation for a driver to invent
+  // one. `matches` is null until searched; [] means "searched, found none."
+  const [matches, setMatches] = useState<Ride[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setMatches(null);
+    setSaved(false);
+  }, [origin, destination, departureTime, mode]);
+
   const estimate = useMemo(() => {
     if (!origin || !destination) return null;
     const miles = distanceInMiles(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
-    return priceBreakdown(miles);
-  }, [origin, destination]);
+    return estimateGasCostSplit(miles, seats + 1);
+  }, [origin, destination, seats]);
 
-  const handleSubmit = async () => {
+  const handleFindMatches = async () => {
+    if (!origin || !destination) {
+      setError('Set both a pickup and drop-off location.');
+      return;
+    }
+    setError(null);
+    setSearching(true);
+    try {
+      const found = await findMatchingRides(
+        origin.latitude,
+        origin.longitude,
+        destination.latitude,
+        destination.longitude,
+        departureTime.toISOString()
+      );
+      setMatches(found);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSaveRequest = async () => {
+    if (!session || !origin || !destination) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await createRideRequest({
+        riderId: session.user.id,
+        originLabel: origin.label,
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        destinationLabel: destination.label,
+        destinationLat: destination.latitude,
+        destinationLng: destination.longitude,
+        requestedTime: departureTime.toISOString(),
+      });
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePostRide = async () => {
     if (!session) return;
     if (!origin || !destination) {
       setError('Set both a pickup and drop-off location.');
@@ -38,36 +99,23 @@ export default function PostRide() {
     setError(null);
     setLoading(true);
     try {
-      if (mode === 'offer') {
-        await refreshProfile();
-        if (!canOffer) {
-          setError('You need to be a verified driver to post a ride offer.');
-          setLoading(false);
-          return;
-        }
-        await createRide({
-          driverId: session.user.id,
-          originLabel: origin.label,
-          originLat: origin.latitude,
-          originLng: origin.longitude,
-          destinationLabel: destination.label,
-          destinationLat: destination.latitude,
-          destinationLng: destination.longitude,
-          departureTime: departureTime.toISOString(),
-          seatsTotal: seats,
-        });
-      } else {
-        await createRideRequest({
-          riderId: session.user.id,
-          originLabel: origin.label,
-          originLat: origin.latitude,
-          originLng: origin.longitude,
-          destinationLabel: destination.label,
-          destinationLat: destination.latitude,
-          destinationLng: destination.longitude,
-          requestedTime: departureTime.toISOString(),
-        });
+      await refreshProfile();
+      if (!canOffer) {
+        setError('You need to be a verified driver to post a ride offer.');
+        setLoading(false);
+        return;
       }
+      await createRide({
+        driverId: session.user.id,
+        originLabel: origin.label,
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        destinationLabel: destination.label,
+        destinationLat: destination.latitude,
+        destinationLng: destination.longitude,
+        departureTime: departureTime.toISOString(),
+        seatsTotal: seats,
+      });
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -85,19 +133,25 @@ export default function PostRide() {
           onPress={() => setMode('offer')}
           disabled={!canOffer}
         />
-        <SegmentButton label="Request a ride" active={mode === 'request'} onPress={() => setMode('request')} />
+        <SegmentButton label="Find a ride" active={mode === 'request'} onPress={() => setMode('request')} />
       </View>
       {mode === 'offer' && !canOffer && (
         <Text style={styles.notice}>
-          You'll need to become a verified driver before you can post ride offers. You can still post a ride
-          request below.
+          You'll need to become a verified driver before you can post ride offers. You can still look for a ride
+          below.
+        </Text>
+      )}
+      {mode === 'request' && (
+        <Text style={styles.notice}>
+          We'll check for trips drivers have already posted on this route and time. If nothing matches yet, you can
+          save this and we'll keep watching — drivers never see unmatched requests.
         </Text>
       )}
 
       <MapPicker label="Pickup location" value={origin} onChange={setOrigin} />
       <MapPicker label="Drop-off location" value={destination} onChange={setDestination} />
 
-      <Text style={styles.label}>{mode === 'offer' ? 'Departure time' : 'Requested time'}</Text>
+      <Text style={styles.label}>{mode === 'offer' ? 'Departure time' : 'When you need to leave'}</Text>
       <Pressable style={styles.dateButton} onPress={() => setShowPicker(true)}>
         <Text style={styles.dateButtonText}>
           {departureTime.toLocaleString(undefined, {
@@ -141,13 +195,15 @@ export default function PostRide() {
 
       {mode === 'offer' && estimate && (
         <View style={styles.estimateCard}>
-          <Text style={styles.estimateLabel}>Estimated flat rate</Text>
-          <Text style={styles.estimateValue}>{formatCurrency(estimate.total)} / seat</Text>
+          <Text style={styles.estimateLabel}>Estimated gas cost split</Text>
+          <Text style={styles.estimateValue}>{formatCurrency(estimate.costPerPerson)} / person</Text>
           <Text style={styles.estimateBreakdown}>
-            {formatMiles(estimate.distanceMiles)} · {formatMinutes(estimate.minutes)} est. · $1.50/mi + $1.20/min
+            {formatMiles(estimate.distanceMiles)} · {formatCurrency(estimate.totalGasCost)} total gas ÷{' '}
+            {estimate.occupants} people (you + {seats} rider{seats === 1 ? '' : 's'}) · assumes {ASSUMED_MPG} mpg at $
+            {PRICE_PER_GALLON.toFixed(2)}/gal
           </Text>
           <Text style={styles.settleNote}>
-            This is a price estimate, not an in-app charge — riders and drivers settle up directly (Venmo, Zelle,
+            This is a gas cost estimate, not an in-app charge — riders and drivers settle up directly (Venmo, Zelle,
             cash, etc.).
           </Text>
         </View>
@@ -155,12 +211,38 @@ export default function PostRide() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <PrimaryButton
-        title={mode === 'offer' ? 'Post ride offer' : 'Post ride request'}
-        onPress={handleSubmit}
-        loading={loading}
-        style={styles.submit}
-      />
+      {mode === 'offer' ? (
+        <PrimaryButton title="Post ride offer" onPress={handlePostRide} loading={loading} style={styles.submit} />
+      ) : matches === null ? (
+        <PrimaryButton
+          title="Search for a matching ride"
+          onPress={handleFindMatches}
+          loading={searching}
+          style={styles.submit}
+        />
+      ) : matches.length > 0 ? (
+        <View style={styles.matchesSection}>
+          <Text style={styles.matchesTitle}>
+            {matches.length} matching trip{matches.length === 1 ? '' : 's'} already posted
+          </Text>
+          {matches.map((ride) => (
+            <RideCard key={ride.id} ride={ride} onPress={() => router.push(`/ride/${ride.id}`)} />
+          ))}
+        </View>
+      ) : saved ? (
+        <Text style={styles.savedText}>Saved — we'll keep watching for a matching trip.</Text>
+      ) : (
+        <View>
+          <Text style={styles.notice}>No matching trips are posted yet.</Text>
+          <PrimaryButton
+            title="Save request & get notified"
+            onPress={handleSaveRequest}
+            loading={loading}
+            variant="secondary"
+            style={styles.submit}
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -303,6 +385,22 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   submit: {
+    marginTop: spacing.sm,
+  },
+  matchesSection: {
+    marginTop: spacing.sm,
+  },
+  matchesTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    color: colors.gray800,
+    marginBottom: spacing.sm,
+  },
+  savedText: {
+    fontSize: fontSizes.sm,
+    color: colors.success,
+    fontWeight: '600',
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
 });

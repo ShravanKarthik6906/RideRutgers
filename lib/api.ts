@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
-import { distanceInMiles, flatRatePrice } from './pricing';
-import type { Booking, DriverPresence, Profile, Ride, RideMessage, RideRequest } from './types';
+import { distanceInMiles, estimateGasCostSplit } from './pricing';
+import { MATCH_RADIUS_MILES, MATCH_TIME_WINDOW_HOURS } from '../constants/matching';
+import type { Booking, Profile, Ride, RideMessage, RideRequest } from './types';
 
 const RIDE_SELECT = '*, driver:profiles!rides_driver_id_fkey(*)';
 const BOOKING_SELECT = '*, ride:rides(*, driver:profiles!rides_driver_id_fkey(*)), rider:profiles!bookings_rider_id_fkey(*)';
@@ -46,7 +47,8 @@ export interface CreateRideInput {
 
 export async function createRide(input: CreateRideInput): Promise<Ride> {
   const distance = distanceInMiles(input.originLat, input.originLng, input.destinationLat, input.destinationLng);
-  const price = flatRatePrice(distance);
+  // Estimate assumes the car fills up (driver + all seats) — see constants/pricing.ts.
+  const { costPerPerson } = estimateGasCostSplit(distance, input.seatsTotal + 1);
   const { data, error } = await supabase
     .from('rides')
     .insert({
@@ -61,7 +63,7 @@ export async function createRide(input: CreateRideInput): Promise<Ride> {
       departure_time: input.departureTime,
       seats_total: input.seatsTotal,
       seats_available: input.seatsTotal,
-      price_per_seat: price,
+      cost_per_person: Math.round(costPerPerson * 100) / 100,
     })
     .select(RIDE_SELECT)
     .single();
@@ -86,16 +88,57 @@ export async function cancelRide(rideId: string): Promise<void> {
   await updateRideStatus(rideId, 'cancelled');
 }
 
-// ---- Ride requests (riders looking for a ride) ----
+// ---- Ride requests ----
+//
+// A request only ever helps the rider who posted it find a trip a driver
+// already planned — it must never work as a public "someone please drive me
+// here" bounty that could prompt a driver to invent a new trip in response.
+// So requests are private to their rider (enforced by RLS, see migration
+// 0004) and matched client-side against already-posted rides, not broadcast.
 
-export async function fetchOpenRideRequests(): Promise<RideRequest[]> {
+// Existing, already-posted trips that roughly cover a rider's desired route
+// and time. This is the only way a request "matches" — never the reverse.
+export async function findMatchingRides(
+  originLat: number,
+  originLng: number,
+  destinationLat: number,
+  destinationLng: number,
+  requestedTime: string
+): Promise<Ride[]> {
+  const candidates = await fetchUpcomingRides();
+  const requestedAt = new Date(requestedTime).getTime();
+  const windowMs = MATCH_TIME_WINDOW_HOURS * 60 * 60 * 1000;
+  return candidates.filter((ride) => {
+    if (ride.status !== 'scheduled' || ride.seats_available <= 0) return false;
+    const originDistance = distanceInMiles(originLat, originLng, ride.origin_lat, ride.origin_lng);
+    const destinationDistance = distanceInMiles(
+      destinationLat,
+      destinationLng,
+      ride.destination_lat,
+      ride.destination_lng
+    );
+    if (originDistance > MATCH_RADIUS_MILES || destinationDistance > MATCH_RADIUS_MILES) return false;
+    const departureAt = new Date(ride.departure_time).getTime();
+    return Math.abs(departureAt - requestedAt) <= windowMs;
+  });
+}
+
+// A rider's own pending requests only — never a general feed. RLS already
+// enforces this at the database level; this filter just matches that intent.
+export async function fetchMyRideRequests(riderId: string): Promise<RideRequest[]> {
   const { data, error } = await supabase
     .from('ride_requests')
     .select('*, rider:profiles!ride_requests_rider_id_fkey(*)')
+    .eq('rider_id', riderId)
     .eq('status', 'open')
     .order('requested_time', { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as RideRequest[];
+}
+
+export async function cancelRideRequest(requestId: string): Promise<void> {
+  const { error } = await supabase.from('ride_requests').update({ status: 'cancelled' }).eq('id', requestId);
+  if (error) throw error;
 }
 
 export interface CreateRideRequestInput {
@@ -237,28 +280,6 @@ export async function applyForDriverVerification(input: {
   });
   if (error) throw error;
   await supabase.from('profiles').update({ driver_verification_status: 'pending' }).eq('id', input.userId);
-}
-
-// ---- Driver presence (foreground-only "online" broadcast for the live map) ----
-
-export async function fetchOnlineDrivers(): Promise<DriverPresence[]> {
-  const { data, error } = await supabase
-    .from('driver_presence')
-    .select('*, driver:profiles!driver_presence_driver_id_fkey(*)');
-  if (error) throw error;
-  return (data ?? []) as unknown as DriverPresence[];
-}
-
-export async function updateMyPresence(driverId: string, lat: number, lng: number): Promise<void> {
-  const { error } = await supabase
-    .from('driver_presence')
-    .upsert({ driver_id: driverId, lat, lng, updated_at: new Date().toISOString() });
-  if (error) throw error;
-}
-
-export async function goOffline(driverId: string): Promise<void> {
-  const { error } = await supabase.from('driver_presence').delete().eq('driver_id', driverId);
-  if (error) throw error;
 }
 
 // ---- Profile ----

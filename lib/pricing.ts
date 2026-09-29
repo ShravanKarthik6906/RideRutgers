@@ -1,11 +1,4 @@
-const RATE_PER_MILE = 1.5;
-const RATE_PER_MINUTE = 1.2;
-const MINIMUM_FARE = 3;
-
-// No routing/directions API is wired up, so trip duration is estimated from
-// distance at a flat assumed speed. It's only used to compute the per-minute
-// portion of the estimate shown to riders/drivers, not for navigation.
-const ASSUMED_AVERAGE_SPEED_MPH = 25;
+import { ASSUMED_MPG, PRICE_PER_GALLON } from '../constants/pricing';
 
 const EARTH_RADIUS_MILES = 3958.8;
 
@@ -28,28 +21,20 @@ export function distanceInMiles(
   return EARTH_RADIUS_MILES * c;
 }
 
-export function estimatedMinutes(distanceMiles: number): number {
-  return (distanceMiles / ASSUMED_AVERAGE_SPEED_MPH) * 60;
-}
-
-export interface PriceBreakdown {
+export interface GasCostSplit {
   distanceMiles: number;
-  minutes: number;
-  mileageCost: number;
-  timeCost: number;
-  total: number;
+  occupants: number;
+  totalGasCost: number;
+  costPerPerson: number;
 }
 
-export function priceBreakdown(distanceMiles: number): PriceBreakdown {
-  const minutes = estimatedMinutes(distanceMiles);
-  const mileageCost = distanceMiles * RATE_PER_MILE;
-  const timeCost = minutes * RATE_PER_MINUTE;
-  const total = Math.max(MINIMUM_FARE, Math.round((mileageCost + timeCost) * 100) / 100);
-  return { distanceMiles, minutes, mileageCost, timeCost, total };
-}
-
-export function flatRatePrice(distanceMiles: number): number {
-  return priceBreakdown(distanceMiles).total;
+// Distance-only gas cost, split evenly across everyone in the car (driver
+// included) — no time component, no surge, no per-rider negotiation. See
+// constants/pricing.ts for why and how to tune the MPG/gas-price assumptions.
+export function estimateGasCostSplit(distanceMiles: number, occupants: number): GasCostSplit {
+  const totalGasCost = (distanceMiles / ASSUMED_MPG) * PRICE_PER_GALLON;
+  const costPerPerson = totalGasCost / occupants;
+  return { distanceMiles, occupants, totalGasCost, costPerPerson };
 }
 
 export function formatCurrency(amount: number): string {
@@ -58,8 +43,4 @@ export function formatCurrency(amount: number): string {
 
 export function formatMiles(distanceMiles: number): string {
   return `${distanceMiles.toFixed(1)} mi`;
-}
-
-export function formatMinutes(minutes: number): string {
-  return `${Math.round(minutes)} min`;
 }

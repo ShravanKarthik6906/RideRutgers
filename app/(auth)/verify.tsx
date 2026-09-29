@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
@@ -29,7 +30,7 @@ export default function Verify() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Text style={styles.title}>Check your inbox</Text>
       <Text style={styles.subtitle}>
         We sent a confirmation link to {email}. Tap it on this device to finish signing in.
@@ -42,7 +43,7 @@ export default function Verify() {
       <Text style={styles.link} onPress={() => router.back()}>
         Use a different email
       </Text>
-    </View>
+    </SafeAreaView>
   );
 }
 

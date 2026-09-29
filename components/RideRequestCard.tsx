@@ -1,7 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
-import { StatusBadge } from './StatusBadge';
 import type { RideRequest } from '../lib/types';
 
 function formatWhen(iso: string): string {
@@ -15,13 +14,21 @@ function formatWhen(iso: string): string {
   return `${dateStr} · ${timeStr}`;
 }
 
-export function RideRequestCard({ request }: { request: RideRequest }) {
+// Only ever shown to the rider who created the request — it's never a public
+// feed, so this reads first-person ("you're looking for") rather than
+// broadcasting the rider's identity to anyone browsing.
+export function RideRequestCard({
+  request,
+  matchCount,
+  onCancel,
+}: {
+  request: RideRequest;
+  matchCount: number;
+  onCancel: () => void;
+}) {
   return (
     <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <Text style={styles.when}>{formatWhen(request.requested_time)}</Text>
-        <StatusBadge status={request.status} />
-      </View>
+      <Text style={styles.when}>{formatWhen(request.requested_time)}</Text>
 
       <View style={styles.routeRow}>
         <View style={styles.routeDots}>
@@ -40,9 +47,14 @@ export function RideRequestCard({ request }: { request: RideRequest }) {
       </View>
 
       <View style={styles.footerRow}>
-        <Text style={styles.riderName}>
-          {request.rider?.full_name ?? 'A Rutgers student'} is looking for a ride
+        <Text style={matchCount > 0 ? styles.matchText : styles.noMatchText}>
+          {matchCount > 0
+            ? `${matchCount} matching trip${matchCount === 1 ? '' : 's'} posted — check the Ride Board`
+            : "No matching trips posted yet — we'll keep watching."}
         </Text>
+        <Pressable onPress={onCancel}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -61,16 +73,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
   when: {
     fontSize: fontSizes.sm,
     fontWeight: '700',
     color: colors.gray800,
+    marginBottom: spacing.sm,
   },
   routeRow: {
     flexDirection: 'row',
@@ -111,12 +118,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: colors.gray100,
     paddingTop: spacing.sm,
   },
-  riderName: {
+  matchText: {
+    fontSize: fontSizes.xs,
+    color: colors.success,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  noMatchText: {
     fontSize: fontSizes.xs,
     color: colors.gray600,
+    flexShrink: 1,
+  },
+  cancelText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    color: colors.danger,
+    marginLeft: spacing.sm,
   },
 });

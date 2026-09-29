@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
@@ -41,19 +42,19 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Text style={styles.error}>{error}</Text>
         <Text style={styles.link} onPress={() => router.replace('/(auth)/sign-in')}>
           Back to sign in
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ActivityIndicator color={colors.scarlet} size="large" />
-    </View>
+    </SafeAreaView>
   );
 }
 

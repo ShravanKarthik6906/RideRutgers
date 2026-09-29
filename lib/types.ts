@@ -28,7 +28,7 @@ export interface Ride {
   departure_time: string;
   seats_total: number;
   seats_available: number;
-  price_per_seat: number;
+  cost_per_person: number;
   status: RideStatus;
   live_lat: number | null;
   live_lng: number | null;
@@ -80,12 +80,4 @@ export interface Rating {
   stars: number;
   comment: string | null;
   created_at: string;
-}
-
-export interface DriverPresence {
-  driver_id: string;
-  lat: number;
-  lng: number;
-  updated_at: string;
-  driver?: Profile;
 }

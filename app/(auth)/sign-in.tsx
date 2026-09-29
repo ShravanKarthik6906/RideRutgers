@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
@@ -40,11 +41,12 @@ export default function SignIn() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.container}>
+    <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.container}>
         <View style={styles.brandBlock}>
           <Text style={styles.brandR}>RR</Text>
           <Text style={styles.title}>RideRutgers</Text>
@@ -70,8 +72,9 @@ export default function SignIn() {
         <Text style={styles.footnote}>
           We'll email you a one-time code to verify you're a Rutgers student. No password needed.
         </Text>
-      </View>
-    </KeyboardAvoidingView>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

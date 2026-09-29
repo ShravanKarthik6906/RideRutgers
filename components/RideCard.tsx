@@ -53,7 +53,7 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress: () => void })
         <View style={styles.footerRight}>
           <Text style={styles.seats}>{ride.seats_available} seat{ride.seats_available === 1 ? '' : 's'} left</Text>
           <Text style={styles.price}>
-            {formatCurrency(ride.price_per_seat)} · {formatMiles(ride.distance_miles)}
+            {formatCurrency(ride.cost_per_person)}/person · {formatMiles(ride.distance_miles)}
           </Text>
         </View>
       </View>

@@ -1,28 +1,39 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '../../lib/auth';
-import { fetchMyBookings, fetchRidesByDriver } from '../../lib/api';
+import {
+  cancelRideRequest,
+  fetchMyBookings,
+  fetchMyRideRequests,
+  fetchRidesByDriver,
+  findMatchingRides,
+} from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { RideCard } from '../../components/RideCard';
+import { RideRequestCard } from '../../components/RideRequestCard';
 import { EmptyState } from '../../components/EmptyState';
 import { colors, spacing, fontSizes } from '../../constants/theme';
-import type { Ride } from '../../lib/types';
+import type { Ride, RideRequest } from '../../lib/types';
 
 type Row = { ride: Ride; role: 'driver' | 'rider' };
 
 export default function MyRides() {
   const { session } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
+  const [myRequests, setMyRequests] = useState<RideRequest[]>([]);
+  const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!session) return;
     try {
-      const [driverRides, bookings] = await Promise.all([
+      const [driverRides, bookings, requests] = await Promise.all([
         fetchRidesByDriver(session.user.id),
         fetchMyBookings(session.user.id),
+        fetchMyRideRequests(session.user.id),
       ]);
       const riderRows: Row[] = bookings
         .filter((b) => b.ride && b.status !== 'declined' && b.status !== 'cancelled')
@@ -32,6 +43,16 @@ export default function MyRides() {
         (a, b) => new Date(b.ride.departure_time).getTime() - new Date(a.ride.departure_time).getTime()
       );
       setRows(merged);
+      setMyRequests(requests);
+
+      const counts = await Promise.all(
+        requests.map((r) =>
+          findMatchingRides(r.origin_lat, r.origin_lng, r.destination_lat, r.destination_lng, r.requested_time).then(
+            (matches) => [r.id, matches.length] as const
+          )
+        )
+      );
+      setMatchCounts(Object.fromEntries(counts));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -44,11 +65,17 @@ export default function MyRides() {
       .channel('my-rides')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ride_requests' }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [load]);
+
+  const handleCancelRequest = async (requestId: string) => {
+    await cancelRideRequest(requestId);
+    load();
+  };
 
   const upcoming = useMemo(
     () => rows.filter((r) => r.ride.status === 'scheduled' || r.ride.status === 'in_progress'),
@@ -65,7 +92,7 @@ export default function MyRides() {
   ];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Text style={styles.title}>My Rides</Text>
       <FlatList
         data={sections}
@@ -81,6 +108,21 @@ export default function MyRides() {
             tintColor={colors.scarlet}
           />
         }
+        ListHeaderComponent={
+          myRequests.length > 0 ? (
+            <View>
+              <Text style={styles.sectionTitle}>My requests</Text>
+              {myRequests.map((request) => (
+                <RideRequestCard
+                  key={request.id}
+                  request={request}
+                  matchCount={matchCounts[request.id] ?? 0}
+                  onCancel={() => handleCancelRequest(request.id)}
+                />
+              ))}
+            </View>
+          ) : null
+        }
         renderItem={({ item: section }) => (
           <View>
             <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -89,7 +131,7 @@ export default function MyRides() {
                 title={section.title === 'Upcoming' ? 'No upcoming rides' : 'No past rides yet'}
                 subtitle={
                   section.title === 'Upcoming'
-                    ? 'Post a ride or request to join one from the Ride Board.'
+                    ? 'Post a ride or find one to join from the Ride Board.'
                     : undefined
                 }
               />
@@ -105,7 +147,7 @@ export default function MyRides() {
         )}
         ListEmptyComponent={!loading ? <EmptyState title="No rides yet" /> : null}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
