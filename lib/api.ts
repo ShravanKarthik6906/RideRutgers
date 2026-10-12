@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { distanceInMiles, estimateGasCostSplit } from './pricing';
-import { MATCH_RADIUS_MILES, MATCH_TIME_WINDOW_HOURS } from '../constants/matching';
+import { filterMatchingRides } from './matching';
 import type { Booking, Profile, Ride, RideMessage, RideRequest } from './types';
 
 const RIDE_SELECT = '*, driver:profiles!rides_driver_id_fkey(*)';
@@ -74,6 +74,16 @@ export async function createRide(input: CreateRideInput): Promise<Ride> {
 export async function updateRideStatus(rideId: string, status: Ride['status']): Promise<void> {
   const { error } = await supabase.from('rides').update({ status }).eq('id', rideId);
   if (error) throw error;
+
+  if (status === 'completed') {
+    // Riders can only rate once their booking is 'completed' (ratings RLS policy).
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update({ status: 'completed' })
+      .eq('ride_id', rideId)
+      .eq('status', 'confirmed');
+    if (bookingError) throw bookingError;
+  }
 }
 
 export async function updateRideLiveLocation(rideId: string, lat: number, lng: number): Promise<void> {
@@ -106,21 +116,7 @@ export async function findMatchingRides(
   requestedTime: string
 ): Promise<Ride[]> {
   const candidates = await fetchUpcomingRides();
-  const requestedAt = new Date(requestedTime).getTime();
-  const windowMs = MATCH_TIME_WINDOW_HOURS * 60 * 60 * 1000;
-  return candidates.filter((ride) => {
-    if (ride.status !== 'scheduled' || ride.seats_available <= 0) return false;
-    const originDistance = distanceInMiles(originLat, originLng, ride.origin_lat, ride.origin_lng);
-    const destinationDistance = distanceInMiles(
-      destinationLat,
-      destinationLng,
-      ride.destination_lat,
-      ride.destination_lng
-    );
-    if (originDistance > MATCH_RADIUS_MILES || destinationDistance > MATCH_RADIUS_MILES) return false;
-    const departureAt = new Date(ride.departure_time).getTime();
-    return Math.abs(departureAt - requestedAt) <= windowMs;
-  });
+  return filterMatchingRides(candidates, { originLat, originLng, destinationLat, destinationLng, requestedTime });
 }
 
 // A rider's own pending requests only — never a general feed. RLS already
@@ -279,12 +275,18 @@ export async function applyForDriverVerification(input: {
     insurance_photo_path: input.insurancePhotoPath,
   });
   if (error) throw error;
-  await supabase.from('profiles').update({ driver_verification_status: 'pending' }).eq('id', input.userId);
+  // The profile's status flips to 'pending' in a database trigger — clients
+  // can't write driver_verification_status (see migration 0005).
 }
 
 // ---- Profile ----
 
-export async function updateProfile(userId: string, updates: Partial<Profile>): Promise<void> {
+// Clients may only edit these two columns; everything else on a profile
+// (verification, ratings) is server-controlled.
+export async function updateProfile(
+  userId: string,
+  updates: Partial<Pick<Profile, 'full_name' | 'phone'>>
+): Promise<void> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
   if (error) throw error;
 }
