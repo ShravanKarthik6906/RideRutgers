@@ -9,10 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "edu.rutgers.riderutgers"
+      "bundleIdentifier": "io.github.shravankarthik6906.riderutgers"
     },
     "android": {
-      "package": "edu.rutgers.riderutgers",
+      "package": "io.github.shravankarthik6906.riderutgers",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -34,12 +34,7 @@
         }
       ],
       "expo-font",
-      [
-        "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": "process.env.GOOGLE_MAPS_API_KEY"
-        }
-      ],
+      "react-native-maps",
       [
         "expo-image-picker",
         {

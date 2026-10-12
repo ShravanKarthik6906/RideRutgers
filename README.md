@@ -1,69 +1,104 @@
 # RideRutgers
 
-Verified peer-to-peer ridesharing for Rutgers students. Expo (React Native + TypeScript) app backed by Supabase (Postgres, Auth, Realtime). Runs on iOS and Android via Expo Go — no simulator or native build required for development.
+![CI](https://github.com/ShravanKarthik6906/RideRutgers/actions/workflows/ci.yml/badge.svg)
+
+A carpool board for Rutgers students: drivers post trips they were **already planning to make**, riders find and join one, and everyone splits the gas. Built with Expo (React Native + TypeScript) and Supabase (Postgres, Auth, Realtime, row-level security). Runs on a phone via Expo Go — no native build needed.
+
+> Student project. Not affiliated with or endorsed by Rutgers University. See [Design intent & disclaimer](#design-intent--disclaimer).
+
+## What makes it interesting
+
+Most "rideshare" demos are an Uber clone. This one is deliberately constrained so it behaves like a carpool board, not an on-demand ride service — and those constraints are enforced in the database, not just hidden in the UI:
+
+| Design decision | How it's enforced |
+| --- | --- |
+| Cost is a **distance-only gas split**, never a fare (no per-minute, no surge, no per-rider price) | One pure function, `estimateGasCostSplit` in [`lib/pricing.ts`](lib/pricing.ts); constants in [`constants/pricing.ts`](constants/pricing.ts); unit-tested |
+| Drivers post **scheduled trips only** — no "I'm online now" presence | The live-presence table was removed (migration `0003`); trips require a departure time |
+| A rider's request can **never be browsed by drivers** | Row-level security: requests are `select`-able only by their owner (migration `0004`); matched client-side against already-posted trips only ([`lib/matching.ts`](lib/matching.ts)) |
+| Users can't **promote themselves** to verified driver or confirm their own booking | Column-level grants + a booking-transition trigger (migration `0005`), tested from an `authenticated` session in [`tests/rls.test.ts`](tests/rls.test.ts) |
 
 ## Features
 
-- **.edu-verified sign-in** — email OTP restricted to `rutgers.edu` / `scarletmail.rutgers.edu`.
-- **Ride Board** — drivers post specific, already-planned trips (not live/ad-hoc availability) with an estimated gas cost split; riders can also post open ride requests, and browse posted trips as a list or on a map.
-- **Booking flow** — riders request to join a ride; drivers accept/decline; seats update automatically.
-- **Live tracking** — while a ride is in progress, the driver can share live location, visible to the rider on a map in real time (Supabase Realtime).
-- **In-ride chat** — simple messaging between a driver and their riders.
-- **Driver verification** — students apply with license + vehicle info; only verified drivers can post ride offers. Reviewed manually (see below) — no in-app admin panel yet.
-- **Ratings** — riders and drivers rate each other after a completed ride.
-- **No in-app payments** — RideRutgers only shows a gas cost estimate. Riders and drivers settle up directly (Venmo, Zelle, cash, etc.); there's no payment processing or Rutgers commission built in.
+- **Email-link sign-in** restricted to `rutgers.edu` / `scarletmail.rutgers.edu` addresses (checked in the app; see limitations).
+- **Ride Board** — browse upcoming posted trips as a list or on a map; post your own trip (verified drivers).
+- **Find a ride** — search posted trips by route and time; if nothing matches, save a private request and the app keeps watching.
+- **Booking** — riders request a seat, drivers accept/decline; per-trip chat; ratings after a completed trip.
+- **Driver verification** — license + insurance photo upload to a private bucket, reviewed manually from the Supabase dashboard.
+- **Safety** — SOS action and one-tap location share (native share sheet) during an active trip; in-trip live location while a ride you've booked is in progress.
+- **No payments** — riders and drivers settle up directly; there is no payment SDK in this project.
 
-## 1. Set up Supabase
+## Design intent & disclaimer
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. In the SQL editor, run the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_presence_and_documents.sql`, `0003_carpool_exemption_compliance.sql`) — they create all tables, row-level security policies, triggers, and the driver-documents storage bucket.
-3. In **Authentication → Providers → Email**, make sure "Enable email OTP" is on (it is by default) — the app uses `signInWithOtp` + a 6-digit code, not magic links.
-4. Copy your project's **URL** and **anon public key** from **Settings → API**.
+This is a statement of what the app is designed to do, **not legal advice and not a claim of legal compliance.** It has **not** been reviewed by an attorney or by Rutgers Student Legal Services. Rules may differ for you and may change.
 
-## 2. Configure the app
+Background that motivated the design (verified against the statute text in October 2026; statutes change, so check current text):
 
-```bash
-cp .env.example .env
+- New Jersey regulates "transportation network companies" under the Transportation Network Company Safety and Regulatory Act, [P.L. 2017, c.26](https://pub.njleg.gov/bills/2016/PL17/26_.HTM) (N.J.S.A. 39:5H-1 et seq.).
+- A TNC must get a permit from the Motor Vehicle Commission before operating (N.J.S.A. 39:5H-4; see the [MVC's TNC page](https://www.nj.gov/mvc/business/tnc.htm)), and during a prearranged ride the driver and/or TNC must carry primary auto liability coverage of at least $1,500,000 (N.J.S.A. 39:5H-10(c)).
+- The Act says a "prearranged ride" does not include "ridesharing, as defined in R.S.39:1-1" (N.J.S.A. 39:5H-2). That definition (R.S. 39:1-1, as reproduced by [FindLaw](https://codes.findlaw.com/nj/title-39-motor-vehicles-and-traffic-regulation/nj-st-sect-39-1-1/)) covers transporting persons in a motor vehicle where it is "incidental to the purpose of the driver," and includes car pools and van pools.
+
+The scheduled-trips-only and private-requests decisions are oriented around that "incidental to the driver's own purpose" idea: trips exist because a driver was already making them, never because a rider asked. Whether this app actually falls within that definition — including how a shared gas-cost estimate is treated — is an open question for a lawyer, not something this README answers.
+
+## Tech stack
+
+Expo SDK 57 · React Native 0.86 · expo-router · TypeScript (strict) · Supabase (Postgres, Auth, Realtime, Storage) · react-native-maps · Vitest + PGlite (tests) · ESLint · GitHub Actions.
+
+## Repo layout
+
+```
+app/                    expo-router screens (auth, tabs, ride detail, post a ride)
+components/             UI pieces; *.web.tsx are web fallbacks for native-only maps
+constants/              pricing + matching constants — tune them in one place
+lib/                    Supabase calls (api), pricing, matching (pure), auth
+supabase/migrations/    0001–0005, applied in order
+tests/                  pricing, matching, and row-level-security tests
 ```
 
-Fill in `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` from the previous step. Leave `GOOGLE_MAPS_API_KEY` blank for now — it's only needed for a production/EAS Android build, not for Expo Go testing (see below).
+## Run it
 
-## 3. Run it on your phone via Expo Go
+Prerequisites: Node 20.19+ / 22.13+ / 24.3+, a free [Supabase](https://supabase.com) project, and Expo Go on your phone.
 
 ```bash
+git clone https://github.com/ShravanKarthik6906/RideRutgers.git
+cd RideRutgers
 npm install
-npx expo start
+cp .env.example .env     # then fill in your Supabase URL and anon key
 ```
 
-This prints a QR code in the terminal.
+1. **Database** — in the Supabase SQL editor, run the files in `supabase/migrations/` in order (`0001` … `0005`).
+2. **Auth** — under Authentication → URL Configuration → Redirect URLs, add the redirect URL(s) the app uses: in Expo Go that's the `exp://…/--/auth/callback` URL the app generates; for a standalone build it's `riderutgers://auth/callback`. Sign-in is an emailed link, so the link must come back to a URL on this allow-list.
+3. **Run** — `npx expo start`, then scan the QR code with your phone (Camera on iOS, Expo Go's scanner on Android).
+4. **Approve a driver** — drivers are approved manually. After someone submits the in-app application, run in the SQL editor (this runs as the database owner, which clients can't do):
 
-- **iOS**: open the Camera app and scan the QR code, or open it directly in the Expo Go app.
-- **Android**: open the Expo Go app and use its built-in QR scanner.
+   ```sql
+   update public.profiles
+   set is_driver_verified = true, driver_verification_status = 'approved'
+   where id = '<user uuid>';
+   ```
 
-Everything used in this app — `expo-router`, `expo-location`, `react-native-maps`, `@react-native-community/datetimepicker` — is supported inside Expo Go on both platforms, so no dev client or native build is needed to test the full flow (auth, ride board, booking, live tracking, chat).
+Standalone Android builds need a Google Maps key: put `GOOGLE_MAPS_API_KEY` in `.env` (read by [`app.config.js`](app.config.js); not needed for Expo Go).
 
-The first verified driver has to be approved manually: after someone submits a driver application (in-app, Profile → Become a verified driver), open **Table editor → profiles** in the Supabase dashboard and set `is_driver_verified = true` and `driver_verification_status = 'approved'` for that user (also update the matching row in `driver_applications`). This manual process is intentional for a small pilot group, not a placeholder for something to build next.
+## Tests & CI
 
-## Pricing model
+```bash
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint, zero warnings allowed
+npm test            # vitest: pricing, matching, RLS
+```
 
-RideRutgers is designed to stay within New Jersey's informal-carpool exemption rather than operating like a Transportation Network Company (which would require a $1.5M commercial insurance policy and an MVC permit). That means two hard constraints, both enforced in the app itself, not just the pricing math:
+The RLS suite runs the real migrations against an in-process Postgres (PGlite) and acts as a normal signed-in user — the same mechanism PostgREST uses (`set role authenticated` + JWT subject). It includes a *control* block proving the pre-`0005` exploits actually work, so the "blocked" assertions can't pass vacuously. CI runs all three on every push.
 
-- **Distance-only gas cost, never time-based.** Estimate = `(distance_miles / assumed_mpg) × price_per_gallon`, split evenly across everyone in the car (driver included) — e.g. a driver + 2 riders splits three ways. No per-minute component, no surge/dynamic pricing, no per-rider negotiated price. The `assumed_mpg` and `price_per_gallon` constants live in [`constants/pricing.ts`](constants/pricing.ts) — update them there if NJ gas prices move meaningfully. The split assumes the car fills up (driver + all posted seats); it's a fixed estimate shown at posting time, not recalculated live as individual seats fill.
-- **Pre-planned trips only, never live/ad-hoc matching.** Drivers post a specific trip they were already planning to take (origin, destination, date/time) — there's no "I'm online and driving around right now" presence broadcast. Riders browse and request to join a specific posted trip. That's the legal line between a carpool and a TNC, separate from the pricing question.
+## Known limitations
 
-This is shown to users as a gas cost estimate to settle up directly, not a charge.
+- **Cost estimate is computed in the client** and stored; a modified client could post a different number. Server-side validation is a next step.
+- **The split assumes a full car** and uses fixed placeholders (25 mpg, $3.30/gal) and straight-line distance, not live fuel prices or routing.
+- **Seat counting is client-side and non-atomic**, and a cancelled confirmed booking doesn't release its seat.
+- **Profiles are readable by every signed-in user** (including email/phone) so riders can see driver names and ratings; this should become a public view with only display fields.
+- **Rating targets aren't validated** against the ride's participants.
+- **The `.edu` check is client-side**; the Supabase project itself would accept other addresses via the API.
+- **Matching runs in the app** over all upcoming trips — fine for a pilot, not for scale. There are no push notifications; "we'll keep watching" is in-app only.
+- **RLS is tested against local Postgres with Supabase-compatible stubs**, not a hosted project; standalone (EAS) builds haven't been exercised.
 
-## Google Maps API key (Android, production builds only)
+## License
 
-`react-native-maps` is included in Expo Go on both platforms with zero setup — Android renders Google Maps out of the box during development. A Google Maps API key is only required when you build a real (non-Expo-Go) Android binary — via `eas build` or `expo run:android`. When you're ready for that:
-
-1. Create a Google Cloud project, enable the **Maps SDK for Android**, and create an API key restricted to your app's package name (`edu.rutgers.riderutgers`) and SHA-1 fingerprint.
-2. Put it in `.env` as `GOOGLE_MAPS_API_KEY=...` (already wired into `app.json`'s `react-native-maps` plugin config — not `EXPO_PUBLIC_`-prefixed, since it's a native-manifest value, not something that should ship inside the JS bundle).
-3. Build: `eas build -p android` (or `npx expo run:android` locally, which needs Android Studio installed).
-
-## Notes on scope / what's simplified
-
-- **Location picking** uses tap-to-drop-a-pin on a map (with reverse geocoding for a label) instead of a full places-autocomplete search, so no Google Places API key is required.
-- **Maps**: iOS uses Apple Maps by default (no key needed, no config). Android uses Google Maps; see above for the production-build key.
-- **Driver review** is manual via the Supabase dashboard rather than an in-app admin panel — fine for a small pilot group.
-- **No payments** — the app computes and displays a gas cost estimate only. There is no Stripe/payment SDK anywhere in this project by design.
+[MIT](LICENSE) © 2026 Shravan Karthik. App icons and splash art in `assets/` are Expo template placeholders.
