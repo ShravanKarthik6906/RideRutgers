@@ -2,20 +2,10 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
+import { formatWhen } from '../lib/format';
 import { formatCurrency, formatMiles } from '../lib/pricing';
 import { StatusBadge } from './StatusBadge';
 import type { Ride } from '../lib/types';
-
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const isToday = date.toDateString() === today.toDateString();
-  const dateStr = isToday
-    ? 'Today'
-    : date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${dateStr} · ${timeStr}`;
-}
 
 export function RideCard({ ride, onPress }: { ride: Ride; onPress: () => void }) {
   return (

@@ -3,14 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, type LatLng, type MapPressEvent } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
+import type { PickedLocation } from '../lib/types';
 
 const RUTGERS_NEW_BRUNSWICK: LatLng = { latitude: 40.5008, longitude: -74.4474 };
-
-export interface PickedLocation {
-  label: string;
-  latitude: number;
-  longitude: number;
-}
 
 interface Props {
   label: string;

@@ -7,7 +7,7 @@ import { fetchUpcomingRides } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { RideCard } from '../../components/RideCard';
 import { EmptyState } from '../../components/EmptyState';
-import { LiveMap } from '../../components/LiveMap';
+import { TripsMap } from '../../components/TripsMap';
 import { colors, spacing, fontSizes, radius } from '../../constants/theme';
 import type { Ride } from '../../lib/types';
 
@@ -84,7 +84,7 @@ export default function Board() {
 
       {layout === 'map' ? (
         <View style={styles.mapWrapper}>
-          <LiveMap rides={filteredRides} onSelectRide={(ride) => router.push(`/ride/${ride.id}`)} />
+          <TripsMap rides={filteredRides} onSelectRide={(ride) => router.push(`/ride/${ride.id}`)} />
         </View>
       ) : (
         <FlatList

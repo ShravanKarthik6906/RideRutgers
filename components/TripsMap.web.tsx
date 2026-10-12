@@ -9,7 +9,7 @@ interface Props {
   onSelectRide: (ride: Ride) => void;
 }
 
-export function LiveMap({ rides, onSelectRide }: Props) {
+export function TripsMap({ rides, onSelectRide }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.banner}>

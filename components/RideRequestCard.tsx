@@ -1,18 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
+import { formatWhen } from '../lib/format';
 import type { RideRequest } from '../lib/types';
-
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const isToday = date.toDateString() === today.toDateString();
-  const dateStr = isToday
-    ? 'Today'
-    : date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${dateStr} · ${timeStr}`;
-}
 
 // Only ever shown to the rider who created the request — it's never a public
 // feed, so this reads first-person ("you're looking for") rather than

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { updateProfile } from '../../lib/api';
@@ -34,12 +34,12 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Text style={styles.title}>Welcome to RideRutgers</Text>
-      <Text style={styles.subtitle}>Let's set up your profile.</Text>
+      <Text style={styles.subtitle}>Let&apos;s set up your profile.</Text>
 
       <Text style={styles.label}>Full name</Text>
       <TextInput
         style={styles.input}
-        placeholder="Naren Natarajan"
+        placeholder="Jane Doe"
         placeholderTextColor={colors.gray400}
         value={fullName}
         onChangeText={setFullName}

@@ -1,16 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import { createRide, createRideRequest, findMatchingRides } from '../lib/api';
 import { distanceInMiles, estimateGasCostSplit, formatCurrency, formatMiles } from '../lib/pricing';
 import { ASSUMED_MPG, PRICE_PER_GALLON } from '../constants/pricing';
-import { MapPicker, type PickedLocation } from '../components/MapPicker';
+import { MapPicker } from '../components/MapPicker';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { RideCard } from '../components/RideCard';
 import { colors, spacing, fontSizes, radius } from '../constants/theme';
-import type { Ride } from '../lib/types';
+import type { PickedLocation, Ride } from '../lib/types';
 
 type Mode = 'offer' | 'request';
 
@@ -20,7 +20,7 @@ export default function PostRide() {
   const [mode, setMode] = useState<Mode>(canOffer ? 'offer' : 'request');
   const [origin, setOrigin] = useState<PickedLocation | null>(null);
   const [destination, setDestination] = useState<PickedLocation | null>(null);
-  const [departureTime, setDepartureTime] = useState(new Date(Date.now() + 60 * 60 * 1000));
+  const [departureTime, setDepartureTime] = useState(() => new Date(Date.now() + 60 * 60 * 1000));
   const [showPicker, setShowPicker] = useState(false);
   const [seats, setSeats] = useState(3);
   const [loading, setLoading] = useState(false);
@@ -28,15 +28,22 @@ export default function PostRide() {
 
   // Request mode is search-first: a request only ever matches against trips
   // drivers already posted, never a public invitation for a driver to invent
-  // one. `matches` is null until searched; [] means "searched, found none."
-  const [matches, setMatches] = useState<Ride[] | null>(null);
+  // one. A result belongs to the exact inputs it was searched for, so changing
+  // any input makes it stale. `matches` is null until searched; [] means
+  // "searched, found none."
+  const searchKey = [
+    mode,
+    origin?.latitude,
+    origin?.longitude,
+    destination?.latitude,
+    destination?.longitude,
+    departureTime.getTime(),
+  ].join('|');
+  const [result, setResult] = useState<{ key: string; rides: Ride[]; saved: boolean } | null>(null);
   const [searching, setSearching] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setMatches(null);
-    setSaved(false);
-  }, [origin, destination, departureTime, mode]);
+  const isCurrent = result?.key === searchKey;
+  const matches = isCurrent ? result.rides : null;
+  const saved = isCurrent && result.saved;
 
   const estimate = useMemo(() => {
     if (!origin || !destination) return null;
@@ -59,7 +66,7 @@ export default function PostRide() {
         destination.longitude,
         departureTime.toISOString()
       );
-      setMatches(found);
+      setResult({ key: searchKey, rides: found, saved: false });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -82,7 +89,7 @@ export default function PostRide() {
         destinationLng: destination.longitude,
         requestedTime: departureTime.toISOString(),
       });
-      setSaved(true);
+      setResult((prev) => (prev && prev.key === searchKey ? { ...prev, saved: true } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -137,14 +144,14 @@ export default function PostRide() {
       </View>
       {mode === 'offer' && !canOffer && (
         <Text style={styles.notice}>
-          You'll need to become a verified driver before you can post ride offers. You can still look for a ride
+          You&apos;ll need to become a verified driver before you can post ride offers. You can still look for a ride
           below.
         </Text>
       )}
       {mode === 'request' && (
         <Text style={styles.notice}>
-          We'll check for trips drivers have already posted on this route and time. If nothing matches yet, you can
-          save this and we'll keep watching — drivers never see unmatched requests.
+          We&apos;ll check for trips drivers have already posted on this route and time. If nothing matches yet, you can
+          save this and we&apos;ll keep watching — drivers never see unmatched requests.
         </Text>
       )}
 
@@ -230,7 +237,7 @@ export default function PostRide() {
           ))}
         </View>
       ) : saved ? (
-        <Text style={styles.savedText}>Saved — we'll keep watching for a matching trip.</Text>
+        <Text style={styles.savedText}>Saved — we&apos;ll keep watching for a matching trip.</Text>
       ) : (
         <View>
           <Text style={styles.notice}>No matching trips are posted yet.</Text>

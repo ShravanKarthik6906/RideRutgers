@@ -1,14 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { colors, radius, spacing, fontSizes } from '../constants/theme';
+import type { PickedLocation } from '../lib/types';
 
 const RUTGERS_NEW_BRUNSWICK = { latitude: 40.5008, longitude: -74.4474 };
-
-export interface PickedLocation {
-  label: string;
-  latitude: number;
-  longitude: number;
-}
 
 interface Props {
   label: string;

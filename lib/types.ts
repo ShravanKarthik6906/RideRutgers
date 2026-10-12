@@ -72,12 +72,9 @@ export interface RideMessage {
   sender?: Profile;
 }
 
-export interface Rating {
-  id: string;
-  ride_id: string;
-  rater_id: string;
-  ratee_id: string;
-  stars: number;
-  comment: string | null;
-  created_at: string;
+// A location chosen on the map picker, with a human-readable label.
+export interface PickedLocation {
+  label: string;
+  latitude: number;
+  longitude: number;
 }

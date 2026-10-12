@@ -41,7 +41,7 @@ import type { Booking, Ride, RideMessage } from '../../lib/types';
 
 export default function RideDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { session, profile } = useAuth();
+  const { session } = useAuth();
   const [ride, setRide] = useState<Ride | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [messages, setMessages] = useState<RideMessage[]>([]);
@@ -71,6 +71,7 @@ export default function RideDetail() {
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount; load() sets state after awaiting
     load();
   }, [load]);
 
@@ -250,7 +251,7 @@ export default function RideDetail() {
         )}
         <Text style={styles.settleNote}>
           This is an estimated gas cost split to settle up directly with the driver (Venmo, Zelle, cash, etc.) —
-          RideRutgers doesn't process payments.
+          RideRutgers doesn&apos;t process payments.
         </Text>
 
         <RouteMap

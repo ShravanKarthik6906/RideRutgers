@@ -11,13 +11,11 @@ interface Props {
   onSelectRide: (ride: Ride) => void;
 }
 
-// Visualizes posted, scheduled trips only — never live/ad-hoc driver
-// availability, and never rider requests (those are private — see
-// lib/api.ts's findMatchingRides). NJ's informal-carpool exemption requires
-// drivers to post trips they were already planning to take, not broadcast
-// "available now," and requests must never work as an open invitation for a
-// driver to invent a trip.
-export function LiveMap({ rides, onSelectRide }: Props) {
+// Visualizes posted, scheduled trips only — never live driver availability,
+// and never rider requests (those are private to their rider; see
+// lib/matching.ts and migration 0004). Design intent: trips are posted in
+// advance by drivers who were already making them.
+export function TripsMap({ rides, onSelectRide }: Props) {
   return (
     <MapView
       style={styles.map}

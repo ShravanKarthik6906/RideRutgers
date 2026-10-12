@@ -21,6 +21,7 @@ export default function AuthCallback() {
     const { params, errorCode } = QueryParams.getQueryParams(url);
 
     if (errorCode || params.error_description) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- parsing the deep-link URL is the effect's whole job
       setError(params.error_description ?? errorCode ?? 'Verification failed.');
       return;
     }
