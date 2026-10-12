@@ -19,7 +19,7 @@ Most "rideshare" demos are an Uber clone. This one is deliberately constrained s
 
 ## Features
 
-- **Email-link sign-in** restricted to `rutgers.edu` / `scarletmail.rutgers.edu` addresses (checked in the app; see limitations).
+- **Passwordless email sign-in** (tap the emailed link or type the code) restricted to `rutgers.edu` / `scarletmail.rutgers.edu` addresses (checked in the app; see limitations).
 - **Ride Board** — browse upcoming posted trips as a list or on a map; post your own trip (verified drivers).
 - **Find a ride** — search posted trips by route and time; if nothing matches, save a private request and the app keeps watching.
 - **Booking** — riders request a seat, drivers accept/decline; per-trip chat; ratings after a completed trip.
@@ -66,7 +66,7 @@ cp .env.example .env     # then fill in your Supabase URL and anon key
 ```
 
 1. **Database** — in the Supabase SQL editor, run the files in `supabase/migrations/` in order (`0001` … `0005`).
-2. **Auth** — under Authentication → URL Configuration → Redirect URLs, add the redirect URL(s) the app uses: in Expo Go that's the `exp://…/--/auth/callback` URL the app generates; for a standalone build it's `riderutgers://auth/callback`. Sign-in is an emailed link, so the link must come back to a URL on this allow-list.
+2. **Auth** — sign-in works by emailed code or link. For the code, edit **both** the *Confirm signup* and *Magic Link* templates (Authentication → Emails) to include `{{ .Token }}`: new users get the first, returning users the second. For the link, add the redirect URL(s) the app uses under Authentication → URL Configuration → Redirect URLs (`exp://**` for Expo Go, `riderutgers://**` for a standalone build). Email links are fiddly in Expo Go dev (especially via Chrome on iOS), so the code is the reliable path.
 3. **Run** — `npx expo start`, then scan the QR code with your phone (Camera on iOS, Expo Go's scanner on Android).
 4. **Approve a driver** — drivers are approved manually. After someone submits the in-app application, run in the SQL editor (this runs as the database owner, which clients can't do):
 

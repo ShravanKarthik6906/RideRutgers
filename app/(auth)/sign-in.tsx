@@ -70,7 +70,7 @@ export default function SignIn() {
         </View>
 
         <Text style={styles.footnote}>
-          We&apos;ll email you a sign-in link to verify you&apos;re a Rutgers student. No password needed.
+          We&apos;ll email you a sign-in link and a code to verify you&apos;re a Rutgers student. No password needed.
         </Text>
         </View>
       </KeyboardAvoidingView>
