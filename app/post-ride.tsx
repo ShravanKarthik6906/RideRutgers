@@ -4,6 +4,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import { createRide, createRideRequest, findMatchingRides } from '../lib/api';
+import { isRequestExpired } from '../lib/matching';
 import { distanceInMiles, estimateGasCostSplit, formatCurrency, formatMiles } from '../lib/pricing';
 import { ASSUMED_MPG, PRICE_PER_GALLON } from '../constants/pricing';
 import { MapPicker } from '../components/MapPicker';
@@ -54,6 +55,10 @@ export default function PostRide() {
   const handleFindMatches = async () => {
     if (!origin || !destination) {
       setError('Set both a pickup and drop-off location.');
+      return;
+    }
+    if (isRequestExpired(departureTime.toISOString())) {
+      setError('Pick a time in the future.');
       return;
     }
     setError(null);

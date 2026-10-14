@@ -96,6 +96,7 @@ The RLS suite runs the real migrations against an in-process Postgres (PGlite) a
 - **Profiles are readable by every signed-in user** (including email/phone) so riders can see driver names and ratings; this should become a public view with only display fields.
 - **Rating targets aren't validated** against the ride's participants.
 - **The `.edu` check is client-side**; the Supabase project itself would accept other addresses via the API.
+- **Expired requests are hidden, not deleted:** a request whose requested time has passed disappears from My Rides and never matches, but its row stays in the database.
 - **Matching runs in the app** over all upcoming trips — fine for a pilot, not for scale. There are no push notifications; "we'll keep watching" is in-app only.
 - **RLS is tested against local Postgres with Supabase-compatible stubs**, not a hosted project; standalone (EAS) builds haven't been exercised.
 

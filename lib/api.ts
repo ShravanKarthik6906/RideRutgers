@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { distanceInMiles, estimateGasCostSplit } from './pricing';
-import { filterMatchingRides } from './matching';
+import { filterMatchingRides, isRequestExpired } from './matching';
 import type { Booking, Profile, Ride, RideMessage, RideRequest } from './types';
 
 const RIDE_SELECT = '*, driver:profiles!rides_driver_id_fkey(*)';
@@ -127,6 +127,8 @@ export async function fetchMyRideRequests(riderId: string): Promise<RideRequest[
     .select('*, rider:profiles!ride_requests_rider_id_fkey(*)')
     .eq('rider_id', riderId)
     .eq('status', 'open')
+    // Expired requests (requested time already passed) are hidden, not deleted.
+    .gte('requested_time', new Date().toISOString())
     .order('requested_time', { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as RideRequest[];
@@ -149,6 +151,9 @@ export interface CreateRideRequestInput {
 }
 
 export async function createRideRequest(input: CreateRideRequestInput): Promise<RideRequest> {
+  if (isRequestExpired(input.requestedTime)) {
+    throw new Error('Pick a time in the future.');
+  }
   const { data, error } = await supabase
     .from('ride_requests')
     .insert({

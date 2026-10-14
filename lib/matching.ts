@@ -10,10 +10,18 @@ export interface TripQuery {
   requestedTime: string;
 }
 
-// A rider's desired trip matches an already-posted ride when it is still open
-// for booking, both ends are within MATCH_RADIUS_MILES, and the departure is
-// within MATCH_TIME_WINDOW_HOURS of the requested time (either direction).
-export function rideMatchesQuery(ride: Ride, query: TripQuery): boolean {
+// A request is expired once the time the rider asked for has passed. Expired
+// requests are hidden from My Rides and never match anything.
+export function isRequestExpired(requestedTime: string, now: number = Date.now()): boolean {
+  return new Date(requestedTime).getTime() < now;
+}
+
+// A rider's desired trip matches an already-posted ride when the requested
+// time hasn't passed, the ride is still open for booking, both ends are within
+// MATCH_RADIUS_MILES, and the departure is within MATCH_TIME_WINDOW_HOURS of
+// the requested time (either direction).
+export function rideMatchesQuery(ride: Ride, query: TripQuery, now: number = Date.now()): boolean {
+  if (isRequestExpired(query.requestedTime, now)) return false;
   if (ride.status !== 'scheduled' || ride.seats_available <= 0) return false;
 
   const originDistance = distanceInMiles(query.originLat, query.originLng, ride.origin_lat, ride.origin_lng);
@@ -30,6 +38,6 @@ export function rideMatchesQuery(ride: Ride, query: TripQuery): boolean {
   return offsetMs <= windowMs;
 }
 
-export function filterMatchingRides(rides: Ride[], query: TripQuery): Ride[] {
-  return rides.filter((ride) => rideMatchesQuery(ride, query));
+export function filterMatchingRides(rides: Ride[], query: TripQuery, now: number = Date.now()): Ride[] {
+  return rides.filter((ride) => rideMatchesQuery(ride, query, now));
 }
