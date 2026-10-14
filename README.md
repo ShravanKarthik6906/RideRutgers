@@ -6,6 +6,27 @@ A carpool board for Rutgers students: drivers post trips they were **already pla
 
 > Student project. Not affiliated with or endorsed by Rutgers University. See [Design intent & disclaimer](#design-intent--disclaimer).
 
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/board-list.jpg" width="190" alt="Ride Board list view showing a scheduled trip with its per-person gas cost"><br>
+      <sub><b>Ride Board</b><br>Scheduled trips, each with a gas-cost split</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/board-map.jpg" width="190" alt="Ride Board map view with a pickup pin, a drop-off pin and a dashed line between them"><br>
+      <sub><b>Map view</b><br>Pickup and drop-off pins for every trip</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/post-ride-cost-split.jpg" width="190" alt="Post a Ride screen showing the estimated gas cost split per person"><br>
+      <sub><b>Post a trip</b><br>Estimated gas cost split across the car</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/ride-detail.jpg" width="190" alt="Ride details screen with the route map, seats open and driver rating"><br>
+      <sub><b>Trip detail</b><br>Route, seats and driver rating</sub>
+    </td>
+  </tr>
+</table>
+
 ## What makes it interesting
 
 Most "rideshare" demos are an Uber clone. This one is deliberately constrained so it behaves like a carpool board, not an on-demand ride service — and those constraints are enforced in the database, not just hidden in the UI:
